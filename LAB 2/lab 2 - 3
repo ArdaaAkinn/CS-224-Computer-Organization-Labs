@@ -1,0 +1,80 @@
+.data
+divident: .asciiz "\nEnter dividend: "
+divisor: .asciiz "Enter divisor: "
+result: .asciiz "Quotient: "
+
+.text
+main:
+
+li 	$v0, 4
+la	$a0, divident
+syscall
+
+li 	$v0, 5
+syscall
+add 	$s0, $v0, $0
+      
+beq 	$s0, $zero, end_prog
+
+li 	$v0, 4
+la 	$a0, divisor
+syscall
+
+li 	$v0, 5
+syscall
+add 	$s1, $v0, $0      
+
+beq 	$s1, $zero, end_prog
+
+add 	$a0, $s0, $0
+add 	$a1, $s1, $0
+
+jal division
+add	$s2, $v0, $0      # Save result
+
+li 	$v0, 4
+la 	$a0, result
+syscall
+
+li	 $v0, 1
+add	$a0, $s2, $0
+syscall
+
+j main
+
+end_prog:
+li 	$v0, 10
+syscall
+
+division:
+  
+addi 	$sp, $sp, -12
+sw 	$ra, 8($sp)
+sw 	$s0, 4($sp)
+sw 	$s1, 0($sp)
+
+add 	$s0, $a0, $0       # Dividend
+add 	$s1, $a1, $0      # Divisor
+
+    
+blt 	$s0, $s1, base_case #dividend < divisor, return 0
+    
+#1 + div(dividend - divisor, divisor)
+sub	$a0, $s0, $s1
+add	$a1, $s1, $0
+jal 	division
+
+addi 	$v0, $v0, 1
+j 	div_return
+
+base_case:
+li 	$v0, 0
+
+div_return:
+
+lw 	$s1, 0($sp)
+lw 	$s0, 4($sp)
+lw 	$ra, 8($sp)
+addi 	$sp, $sp, 12
+
+jr 	$ra

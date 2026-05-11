@@ -1,0 +1,374 @@
+CS224 
+Lab No: 2 
+Section No: 6
+Arda Akın 
+22.02.2025
+
+
+
+---- PART 1 ----
+
+.data
+size: .asciiz "Enter the number of nodes: "
+nodek: .asciiz "Enter the node key "
+noded: .asciiz "Enter the node data "
+colon: .asciiz ": "
+arrow: .asciiz " --> "
+openBracket: .asciiz "("
+comma: .asciiz ", "
+closedBracket: .asciiz ")"
+.text
+
+.globl main
+main:
+
+la 	$a0, size
+li 	$v0, 4
+syscall
+
+li 	$v0, 5
+syscall
+add 	$a0, $v0, 0
+
+jal createLL
+
+move $a0, $v0
+jal printLL
+
+move $a0, $v0
+jal createSummaryLL
+
+move $a0, $v0
+jal printLL
+
+li	$v0, 10
+syscall
+
+
+createLL:
+addi	$sp, $sp, -24
+sw	$s0, 20($sp)
+sw	$s1, 16($sp)
+sw	$s2, 12($sp)
+sw	$s3, 8($sp)
+sw	$s4, 4($sp)
+sw	$ra, 0($sp)
+
+move	$s0, $a0
+li	$s1, 1 #counter
+
+li	$a0, 12
+li	$v0, 9
+syscall
+
+move	$s2, $v0 #ptr
+move	$s3, $v0 #head
+
+la 	$a0, nodek
+li	$v0, 4
+syscall
+
+move	$a0, $s1
+li	$v0, 1
+syscall
+
+la 	$a0, colon
+li	$v0, 4
+syscall
+
+li 	$v0, 5
+syscall
+sw	$v0, 0($s2)
+
+la 	$a0, noded
+li	$v0, 4
+syscall
+
+move	$a0, $s1
+li	$v0, 1
+syscall
+
+la 	$a0, colon
+li	$v0, 4
+syscall
+
+li 	$v0, 5
+syscall
+sw	$v0, 4($s2)
+
+addNode:
+beq	$s1, $s0, alldone
+addi	$s1, $s1, 1
+li	$a0, 12
+li	$v0, 9
+syscall
+
+sw	$v0, 8($s2)
+move	$s2, $v0
+
+la 	$a0, nodek
+li	$v0, 4
+syscall
+
+move	$a0, $s1
+li	$v0, 1
+syscall
+
+la 	$a0, colon
+li	$v0, 4
+syscall
+
+li 	$v0, 5
+syscall
+sw	$v0, 0($s2)
+
+la 	$a0, noded
+li	$v0, 4
+syscall
+
+move	$a0, $s1
+li	$v0, 1
+syscall
+
+la 	$a0, colon
+li	$v0, 4
+syscall
+
+li 	$v0, 5
+syscall
+sw	$v0, 4($s2)
+
+j	addNode
+
+alldone:
+
+sw	$zero, 8($s2)
+move	$v0, $s3 #v0 points to the head
+
+lw	$ra, 0($sp)
+lw	$s4, 4($sp)
+lw	$s3, 8($sp)
+lw	$s2, 12($sp)
+lw	$s1, 16($sp)
+lw	$s0, 20($sp)
+addi	$sp, $sp, 24
+
+jr	$ra
+
+printLL:
+addi	$sp, $sp, -28
+sw	$s0, 24($sp) #curr
+sw	$s1, 20($sp) #next
+sw	$s2, 16($sp) #key
+sw	$s3, 12($sp)  #data
+sw	$s4, 8($sp) #counter
+sw	$s5, 4($sp) #save head
+sw	$ra, 0($sp) 
+
+move	$s0, $a0
+move	$s5, $a0
+li	$s4, 0
+
+li $a0, 10
+li $v0, 11
+syscall
+
+printNextNode:
+beq	$s0, $0, printedAll
+lw	$s2, 0($s0)
+lw	$s3, 4($s0)
+lw	$s1, 8($s0)
+addi	$s4, $s4, 1
+
+la	$a0, arrow
+li	$v0, 4
+syscall
+
+la	$a0, openBracket
+li	$v0, 4
+syscall
+
+move	$a0, $s2
+li	$v0, 1
+syscall
+
+la	$a0, comma
+li	$v0, 4
+syscall
+
+move	$a0, $s3
+li	$v0, 1
+syscall
+
+la	$a0, closedBracket
+li	$v0, 4
+syscall
+
+move	$s0, $s1	
+j	printNextNode
+
+printedAll:
+move	$v0, $s5
+
+lw	$ra, 0($sp)
+lw	$s5, 4($sp)
+lw	$s4, 8($sp)
+lw	$s3, 12($sp)
+lw	$s2, 16($sp)
+lw	$s1, 20($sp)
+lw	$s0, 24($sp)
+addi	$sp, $sp, 28
+
+jr	$ra
+
+createSummaryLL:
+addi	$sp, $sp, -40     
+sw 	$ra, 36($sp)         
+sw	$s0, 32($sp) #curr
+sw	$s1, 28($sp) #key
+sw	$s2, 24($sp) #sum
+sw	$s3, 20($sp) #head sumll
+sw	$s4, 16($sp)  # tail sumll
+sw	$s5, 12($sp)  # Counter 
+sw	$s6, 8($sp)
+sw	$s7, 4($sp)
+
+move 	$s0, $a0           
+li	$s3, 0               
+li 	$s4, 0               
+li 	$s5, 0              
+
+iterate:
+beq 	$s0, 0, done        
+    
+lw 	$s1, 0($s0)          
+li 	$s2, 0           
+move 	$s6, $s0
+
+keyCheck:
+beq	$s6, 0, checkSum   
+lw 	$s7, 0($s6)          
+bne 	$s7, $s1, checkSum
+    
+lw 	$s7, 4($s6)          
+add 	$s2, $s2, $s7       #sum
+    
+lw	 $s6, 8($s6)          # Move to next input node
+j	 keyCheck
+
+
+checkSum:
+beq 	$s2, 0, skipNode # sum = 0 
+    
+li 	$v0, 9               
+li 	$a0, 12             
+syscall
+    
+sw 	$s1, 0($v0)         
+sw 	$s2, 4($v0)          
+sw 	$0,  8($v0)          # Set Next = NULL
+    
+addi	$s5, $s5, 1        
+
+bne	$s3, 0, link_node   # If head exists
+move	$s3, $v0           # head
+move 	$s4, $v0           # tail
+
+move	$s0, $s6
+j iterate
+
+skipNode:
+move	$s0, $s6
+j iterate
+
+link_node:
+sw 	$v0, 8($s4)          # last node's 'next' 
+move	$s4, $v0           # Update tail 
+
+move	$s0, $s6
+j	iterate
+
+done:
+
+move	 $v0, $s3                     
+
+lw	$s7, 4($sp)
+lw 	$s6, 8($sp)
+lw 	$s5, 12($sp)
+lw	$s4, 16($sp)
+lw	$s3, 20($sp)
+lw	$s2, 24($sp)
+lw	$s1, 28($sp)
+lw	$s0, 32($sp)
+lw	$ra, 36($sp)
+addi	$sp, $sp, 40
+jr $ra
+
+
+
+----- PART 2 -----
+
+countAddLw:
+
+addi	$sp, $sp, -36
+sw	$ra, 32($sp)
+sw	$s0, 28($sp)   # ptr
+sw	$s1, 24($sp)   # remaining
+sw	$s2, 20($sp)   # addCount
+sw	$s3, 16($sp)   # lwCount
+sw	$s4, 12($sp)   # instruction
+sw	$s5, 8($sp)    # opcode
+sw	$s6, 4($sp)    # funct
+sw	$s7, 0($sp)
+
+move	$s0, $a0
+move	$s1, $a1
+
+li $s2, 0   
+li $s3, 0   
+
+loop:
+beq	$s1, $zero, doneCount
+
+lw $s4, 0($s0)      
+
+srl	$s5, $s4, 26
+
+li 	$s7, 35
+bne 	$s5, $s7, checkAdd
+addi 	$s3, $s3, 1
+j next
+
+checkAdd:
+
+bne 	$s5, $zero, next #op = 0
+
+andi	$s6, $s4, 0x3F # funct = inst & 0x3F
+
+li 	$s7, 32
+bne 	$s6, $s7, next
+
+addi 	$s2, $s2, 1
+
+next:
+addi 	$s0, $s0, 4
+addi 	$s1, $s1, -1
+j loop
+
+doneCount:
+
+move 	$v0, $s2
+move 	$v1, $s3
+
+lw 	$s7, 0($sp)
+lw 	$s6, 4($sp)
+lw 	$s5, 8($sp)
+lw 	$s4, 12($sp)
+lw 	$s3, 16($sp)
+lw 	$s2, 20($sp)
+lw 	$s1, 24($sp)
+lw 	$s0, 28($sp)
+lw 	$ra, 32($sp)
+addi 	$sp, $sp, 36
+
+jr 	$ra

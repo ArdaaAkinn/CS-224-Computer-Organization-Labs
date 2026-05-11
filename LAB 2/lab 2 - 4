@@ -1,0 +1,255 @@
+.data
+size: .asciiz "Enter the number of nodes: "
+nodek: .asciiz "Enter the node key "
+noded: .asciiz "Enter the node data "
+colon: .asciiz ": "
+arrow: .asciiz " --> "
+openBracket: .asciiz "("
+comma: .asciiz ", "
+closedBracket: .asciiz ")"
+.text
+
+.globl main
+main:
+
+la 	$a0, size
+li 	$v0, 4
+syscall
+
+li 	$v0, 5
+syscall
+
+add 	$a0, $v0, 0
+jal 	createLL
+
+add 	$a0, $v0, 0
+jal 	printLL
+
+add 	$a0, $v0, 0
+jal 	reverse_print
+
+li 	$v0, 10
+syscall
+
+createLL:
+addi	$sp, $sp, -24
+sw	$s0, 20($sp)
+sw	$s1, 16($sp)
+sw	$s2, 12($sp)
+sw	$s3, 8($sp)
+sw	$s4, 4($sp)
+sw	$ra, 0($sp)
+
+add	$s0, $a0, 0
+li	$s1, 1 #counter
+
+li	$a0, 12
+li	$v0, 9
+syscall
+
+add	$s2, $v0, 0 #ptr
+add	$s3, $v0, 0 #head
+
+la 	$a0, nodek
+li	$v0, 4
+syscall
+
+add	$a0, $s1, 0
+li	$v0, 1
+syscall
+
+la 	$a0, colon
+li	$v0, 4
+syscall
+
+li 	$v0, 5
+syscall
+sw	$v0, 0($s2)
+
+la 	$a0, noded
+li	$v0, 4
+syscall
+
+add	$a0, $s1, 0
+li	$v0, 1
+syscall
+
+la 	$a0, colon
+li	$v0, 4
+syscall
+
+li 	$v0, 5
+syscall
+sw	$v0, 4($s2)
+
+addNode:
+beq	$s1, $s0, alldone
+addi	$s1, $s1, 1
+li	$a0, 12
+li	$v0, 9
+syscall
+
+sw	$v0, 8($s2)
+add	$s2, $v0, 0
+
+la 	$a0, nodek
+li	$v0, 4
+syscall
+
+add	$a0, $s1, 0
+li	$v0, 1
+syscall
+
+la 	$a0, colon
+li	$v0, 4
+syscall
+
+li 	$v0, 5
+syscall
+sw	$v0, 0($s2)
+
+la 	$a0, noded
+li	$v0, 4
+syscall
+
+add	$a0, $s1, 0
+li	$v0, 1
+syscall
+
+la 	$a0, colon
+li	$v0, 4
+syscall
+
+li 	$v0, 5
+syscall
+sw	$v0, 4($s2)
+
+j	addNode
+
+alldone:
+
+sw	$zero, 8($s2)
+move	$v0, $s3 #v0 points to the head
+
+lw	$ra, 0($sp)
+lw	$s4, 4($sp)
+lw	$s3, 8($sp)
+lw	$s2, 12($sp)
+lw	$s1, 16($sp)
+lw	$s0, 20($sp)
+addi	$sp, $sp, 24
+
+jr	$ra
+
+printLL:
+addi	$sp, $sp, -28
+sw	$s0, 24($sp) #curr
+sw	$s1, 20($sp) #next
+sw	$s2, 16($sp) #key
+sw	$s3, 12($sp)  #data
+sw	$s4, 8($sp) #counter
+sw	$s5, 4($sp) #save head
+sw	$ra, 0($sp) 
+
+move	$s0, $a0
+move	$s5, $a0
+li	$s4, 0
+
+li $a0, 10
+li $v0, 11
+syscall
+
+printNextNode:
+beq	$s0, $0, printedAll
+lw	$s2, 0($s0)
+lw	$s3, 4($s0)
+lw	$s1, 8($s0)
+addi	$s4, $s4, 1
+
+la	$a0, arrow
+li	$v0, 4
+syscall
+
+la	$a0, openBracket
+li	$v0, 4
+syscall
+
+move	$a0, $s2
+li	$v0, 1
+syscall
+
+la	$a0, comma
+li	$v0, 4
+syscall
+
+move	$a0, $s3
+li	$v0, 1
+syscall
+
+la	$a0, closedBracket
+li	$v0, 4
+syscall
+
+move	$s0, $s1	
+j	printNextNode
+
+printedAll:
+li 	$a0, 10 #newline
+li 	$v0, 11
+syscall
+
+move	$v0, $s5
+
+lw	$ra, 0($sp)
+lw	$s5, 4($sp)
+lw	$s4, 8($sp)
+lw	$s3, 12($sp)
+lw	$s2, 16($sp)
+lw	$s1, 20($sp)
+lw	$s0, 24($sp)
+addi	$sp, $sp, 28
+
+jr	$ra
+
+########## LAB PART ############
+reverse_print:
+addi 	$sp, $sp, -12
+sw 	$ra, 8($sp)
+sw 	$s0, 4($sp)
+
+add 	$s0, $a0, $0 #address of the first node
+
+beq 	$s0, $zero, reverse_done
+
+lw 	$a0, 8($s0)     # recursion
+jal 	reverse_print
+
+li 	$v0, 4
+la 	$a0, arrow     
+syscall
+
+li 	$v0, 4
+la 	$a0, openBracket  
+syscall
+
+li 	$v0, 1
+lw 	$a0, 0($s0)     
+syscall
+
+li 	$v0, 4
+la 	$a0, comma      
+syscall
+
+li 	$v0, 1
+lw 	$a0, 4($s0)     
+syscall
+
+li 	$v0, 4
+la 	$a0, closedBracket  
+syscall
+
+reverse_done:
+lw 	$s0, 4($sp)
+lw 	$ra, 8($sp)
+addi 	$sp, $sp, 12
+jr 	$ra
