@@ -1,0 +1,219 @@
+/*
+CS224
+Lab No. 5
+6
+Arda Akın
+22402316
+Date: 23 April 2026
+
+Part B Preliminary: DC Motor Control
+
+*/
+
+
+// ============================================================
+//  PART B — DC Motor Control
+// ============================================================
+
+// Pin and port definitions
+#define BUTTON0_PIN   0    // RD0
+#define BUTTON1_PIN   1    // RD1
+
+// Motor control outputs on PORTB
+// IN1=1, IN2=0 -> Clockwise
+// IN1=0, IN2=1 -> Counterclockwise
+// IN1=0, IN2=0 -> Stop
+#define MOTOR_IN1_PIN 0    // RB0
+#define MOTOR_IN2_PIN 1    // RB1
+
+#define BUTTON0_PRESSED   ((PORTE >> BUTTON0_PIN) & 0x01)
+#define BUTTON1_PRESSED   ((PORTE >> BUTTON1_PIN) & 0x01)
+
+#define MOTOR_STOP()       do { PORTB &= ~(1 << MOTOR_IN1_PIN); \
+                                PORTB &= ~(1 << MOTOR_IN2_PIN); } while(0)
+#define MOTOR_CLOCKWISE()  do { PORTB |=  (1 << MOTOR_IN1_PIN); \
+                                PORTB &= ~(1 << MOTOR_IN2_PIN); } while(0)
+#define MOTOR_CCW()        do { PORTB &= ~(1 << MOTOR_IN1_PIN); \
+                                PORTB |=  (1 << MOTOR_IN2_PIN); } while(0)
+
+// -----------------------------------------------------------
+
+void main_motor(void)
+{
+    unsigned char btn0, btn1;
+
+    // Configure analog pins as digital I/O
+    AD1PCFG = 0xFFFF;
+
+    // Disable JTAG to free up pins
+    JTAGEN_bit = 0;
+
+    // Configure button pins as digital inputs: TRISD bits 0 and 1 = 1
+    TRISE |= (1 << BUTTON0_PIN) | (1 << BUTTON1_PIN);
+
+    // Configure motor control pins as digital outputs: TRISB bits 0 and 1 = 0
+    TRISB &= ~((1 << MOTOR_IN1_PIN) | (1 << MOTOR_IN2_PIN));
+
+    // Ensure motor is stopped at startup
+    MOTOR_STOP();
+
+    while (1)
+    {
+        btn0 = BUTTON0_PRESSED;
+        btn1 = BUTTON1_PRESSED;
+
+        if (btn0 && btn1)
+        {
+            // Both buttons pressed: stop immediately
+            MOTOR_STOP();
+        }
+        else if (btn0)
+        {
+            // Button 0 only: wait 1 second, then spin clockwise for 1 second
+            Delay_ms(1000);
+            if (BUTTON0_PRESSED && !BUTTON1_PRESSED)
+            {
+                MOTOR_CLOCKWISE();
+                Delay_ms(1000);
+                MOTOR_STOP();
+            }
+        }
+        else if (btn1)
+        {
+            // Button 1 only: wait 1 second, then spin counterclockwise for 1 second
+            Delay_ms(1000);
+            if (BUTTON1_PRESSED && !BUTTON0_PRESSED)
+            {
+                MOTOR_CCW();
+                Delay_ms(1000);
+                MOTOR_STOP();
+            }
+        }
+        else
+        {
+            // No button pressed: ensure motor is stopped
+            MOTOR_STOP();
+        }
+
+        Delay_ms(10);  // small debounce delay between polls
+    }
+}
+
+
+// ============================================================
+//  PART A — Seven-Segment Fibonacci Display
+// ============================================================
+
+// Seven-segment encoding for digits 0-9 (common cathode)
+// Bit mapping: bit6=g, bit5=f, bit4=e, bit3=d, bit2=c, bit1=b, bit0=a
+unsigned char seg_pattern[] = {
+    0x3F,  // 0: segments a,b,c,d,e,f
+    0x06,  // 1: segments b,c
+    0x5B,  // 2: segments a,b,d,e,g
+    0x4F,  // 3: segments a,b,c,d,g
+    0x66,  // 4: segments b,c,f,g
+    0x6D,  // 5: segments a,c,d,f,g
+    0x7D,  // 6: segments a,c,d,e,f,g
+    0x07,  // 7: segments a,b,c
+    0x7F,  // 8: all segments
+    0x6F   // 9: segments a,b,c,d,f,g
+};
+
+// Digit select codes for each of the 4 display positions
+unsigned char digit_select[] = {
+    0x01,  // Digit 1 (leftmost)
+    0x02,  // Digit 2
+    0x04,  // Digit 3
+    0x08   // Digit 4 (rightmost)
+};
+
+void display_number(unsigned int number, unsigned int duration_ms)
+{
+    unsigned int digits[4];   // digits[0]=thousands, ..., digits[3]=units
+    unsigned int i;
+    unsigned int elapsed;
+
+    // Extract individual digits (right to left)
+    digits[3] = number % 10;
+    digits[2] = (number / 10) % 10;
+    digits[1] = (number / 100) % 10;
+    digits[0] = (number / 1000) % 10;
+
+    // Multiplex display for the full duration
+    // Each full cycle through 4 digits takes 4ms (1ms per digit)
+    elapsed = 0;
+    while (elapsed < duration_ms)
+    {
+        for (i = 0; i < 4; i++)
+        {
+            // Suppress leading zeros: blank the digit unless it is significant
+            if (i == 0 && digits[0] == 0)
+            {
+                PORTA = 0x00;
+            }
+            else if (i == 1 && digits[0] == 0 && digits[1] == 0)
+            {
+                PORTA = 0x00;
+            }
+            else if (i == 2 && digits[0] == 0 && digits[1] == 0 && digits[2] == 0)
+            {
+                PORTA = 0x00;
+            }
+            else
+            {
+                // Always show the units digit (i == 3) and any significant digit
+                PORTA = seg_pattern[digits[i]];
+            }
+
+            PORTE = digit_select[i];   // enable this digit
+            Delay_ms(1);               // hold for 1 ms
+            PORTE = 0x00;              // turn off before switching (ghost prevention)
+        }
+        elapsed += 4;  // 4 digits * 1ms = 4ms per cycle
+    }
+}
+
+void main(void)
+{
+    unsigned long fib_prev = 0;
+    unsigned long fib_curr = 1;      // F(1) — first Fibonacci number shown
+    unsigned long fib_next;
+    unsigned int  wait_time;         // fib_curr * 100 ms display/wait time
+
+    // Configure analog pins as digital I/O
+    AD1PCFG = 0xFFFF;
+
+    // Disable JTAG to free up pins
+    JTAGEN_bit = 0;
+
+    // PortA as output (segment lines a–g)
+    TRISA = 0x00;
+
+    // PortE as output (digit select lines)
+    TRISE = 0x00;
+
+    // Turn off all segments and digits initially
+    PORTA = 0x00;
+    PORTE = 0x00;
+
+    while (1)
+    {
+        // Display time in ms = current Fibonacci number * 100
+        wait_time = (unsigned int)(fib_curr * 100UL);
+
+        // Multiplex-display the current Fibonacci number for wait_time milliseconds
+        display_number((unsigned int)fib_curr, wait_time);
+
+        // Advance to the next Fibonacci number
+        fib_next = fib_prev + fib_curr;
+        fib_prev = fib_curr;
+        fib_curr = fib_next;
+
+        // Restart sequence when the number would exceed 4 digits (>= 10000)
+        if (fib_curr >= 10000)
+        {
+            fib_prev = 0;
+            fib_curr = 1;
+        }
+    }
+}s
