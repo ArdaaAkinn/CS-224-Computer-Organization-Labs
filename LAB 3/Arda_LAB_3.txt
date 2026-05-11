@@ -1,0 +1,435 @@
+CS224
+Lab No: 3
+Section No: 6
+Name: Arda Akın
+Date: 03.04.2026
+
+`timescale 1ns / 1ps
+
+   module system_top (
+    input  logic        clk_100mhz,
+    input  logic        reset_button,
+    input  logic        clk_button,
+    output logic [3:0]  AN,
+    output logic [6:0]  SEG,
+    output logic        DP,
+    output logic        led_memwrite
+);
+ 
+    logic        clk_hand, reset_sync;
+    logic [31:0] pc, instr, writedata, dataadr, readdata;
+    logic        memwrite;
+ 
+    pulse_controller clk_pulse (
+        .clk_in     (clk_100mhz),
+        .pb         (clk_button),
+        .pb_onepulse(clk_hand)
+    );
+ 
+    pulse_controller reset_pulse (
+        .clk_in     (clk_100mhz),
+        .pb         (reset_button),
+        .pb_onepulse(reset_sync)
+    );
+ 
+    // MIPS processor - instr ve readdata artık INPUT
+    top mips_top (
+        .clk_button  (clk_hand),
+        .reset_button(reset_sync),
+        .instr       (instr),       // imem'den geliyor
+        .readdata    (readdata),    // dmem'den geliyor
+        .writedata   (writedata),
+        .dataadr     (dataadr),
+        .pc          (pc),
+        .memwrite    (memwrite)
+    );
+ 
+    // Tek sürücü: imem sadece instr'ı sürer
+    imem imem0 (
+        .addr (pc[7:0]),
+        .instr(instr)
+    );
+ 
+    // Tek sürücü: dmem sadece readdata'yı sürer
+    dmem dmem0 (
+        .clk(clk_hand),
+        .we (memwrite),
+        .a  (dataadr),
+        .wd (writedata),
+        .rd (readdata)
+    );
+ 
+    assign led_memwrite = memwrite;
+ 
+    display_controller disp_ctrl (
+        .clk  (clk_100mhz),
+        .data0(pc[3:0]),  
+        .data1(pc[7:4]),    
+        .AN   (AN),
+        .SEG  (SEG),
+        .DP   (DP)
+    );
+ 
+endmodule
+
+
+module pulse_controller(
+    input  logic clk_in,    
+    input  logic pb,        
+    output logic pb_onepulse
+);
+    logic pb_sync_0, pb_sync_1;
+    logic pb_state;
+
+    // Zaman senkronizasyonu
+    always_ff @(posedge clk_in) begin
+        pb_sync_0 <= pb;
+        pb_sync_1 <= pb_sync_0;
+    end
+
+    assign pb_onepulse = pb_sync_1 & ~pb_state;
+
+    always_ff @(posedge clk_in) begin
+        pb_state <= pb_sync_1;
+    end
+endmodule
+
+module display_controller(
+    input  logic clk,
+    input  logic [3:0] data0, // Sağdaki rakam
+    input  logic [3:0] data1, // Soldaki rakam
+    output logic [3:0] AN,
+    output logic [6:0] SEG,
+    output logic DP
+);
+    logic [16:0] clk_div;
+    logic sel;
+
+    // Saat bölücü 
+    always_ff @(posedge clk) begin
+        clk_div <= clk_div + 1;
+    end
+    assign sel = clk_div[16]; 
+
+    // Anot seçimi - Active Low
+    // Sadece sağdaki ikisi
+    assign AN = sel ? 4'b1101 : 4'b1110; 
+
+    logic [3:0] nibble;
+    assign nibble = sel ? data1 : data0;
+
+    // SEG Tablosu 
+    always_comb begin
+        case(nibble)
+            4'h0: SEG = 7'b1000000; // 0
+            4'h1: SEG = 7'b1111001; // 1
+            4'h2: SEG = 7'b0100100; // 2
+            4'h3: SEG = 7'b0110000; // 3
+            4'h4: SEG = 7'b0011001; // 4
+            4'h5: SEG = 7'b0010010; // 5
+            4'h6: SEG = 7'b0000010; // 6
+            4'h7: SEG = 7'b1111000; // 7
+            4'h8: SEG = 7'b0000000; // 8
+            4'h9: SEG = 7'b0010000; // 9
+            4'hA: SEG = 7'b0001000; // A
+            4'hB: SEG = 7'b0000011; // b
+            4'hC: SEG = 7'b1000110; // C
+            4'hD: SEG = 7'b0100001; // d
+            4'hE: SEG = 7'b0000110; // E
+            4'hF: SEG = 7'b0001110; // F
+            default: SEG = 7'b1111111; // Hepsi sönük
+        endcase
+    end
+
+    assign DP = 1'b1; // Nokta her zaman sönük
+endmodule
+
+`timescale 1ns / 1ps
+
+module top (
+    input  logic        clk_button,
+    input  logic        reset_button,
+    input  logic [31:0] instr,        // ← INPUT  (imem'den geliyor)
+    input  logic [31:0] readdata,     // ← INPUT  (dmem'den geliyor)
+    output logic [31:0] writedata,
+    output logic [31:0] dataadr,
+    output logic [31:0] pc,
+    output logic        memwrite
+);
+ 
+    mips mips0 (
+        .clk      (clk_button),
+        .reset    (reset_button),
+        .pc       (pc),
+        .instr    (instr),
+        .memwrite (memwrite),
+        .aluout   (dataadr),
+        .writedata(writedata),
+        .readdata (readdata)
+    );
+ 
+endmodule
+// Debounce + synchronizer for push button
+module push_button(input logic pb, input logic clk_in, output logic sig);
+    logic pb_sync1, pb_sync2;
+    always_ff @(posedge clk_in) begin
+        pb_sync1 <= pb;
+            pb_sync2 <= pb_sync1;
+    end
+    assign sig = pb_sync2;
+endmodule
+
+// jri/slti eklendi
+module mips (
+    input logic clk, reset,
+    output logic [31:0] pc,
+    input logic [31:0] instr,
+    output logic memwrite,
+    output logic [31:0] aluout, writedata,
+    input logic [31:0] readdata
+);
+    logic memtoreg, pcsrc, zero, alusrc, regdst, regwrite, jump;
+    logic jrictrl; //yeni
+    logic [2:0] alucontrol;
+
+    controller c (
+        .op(instr[31:26]), .funct(instr[5:0]), .zero(zero),
+        .memtoreg(memtoreg), .memwrite(memwrite), .pcsrc(pcsrc),
+        .alusrc(alusrc), .regdst(regdst), .regwrite(regwrite),
+        .jump(jump), .jrictrl(jrictrl), .alucontrol(alucontrol)
+    );
+
+    datapath dp (
+        .clk(clk), .reset(reset),
+        .memtoreg(memtoreg), .pcsrc(pcsrc),
+        .alusrc(alusrc), .regdst(regdst),
+        .regwrite(regwrite), .jump(jump), .jrictrl(jrictrl),
+        .alucontrol(alucontrol),
+        .zero(zero), .pc(pc), .instr(instr),
+        .aluout(aluout), .writedata(writedata),
+        .readdata(readdata)
+    );
+endmodule
+
+
+module controller (
+    input logic [5:0] op, funct,
+    input logic zero,
+    output logic memtoreg, memwrite, pcsrc, alusrc,
+    output logic regdst, regwrite, jump, jrictrl,
+    output logic [2:0] alucontrol
+);
+    logic [1:0] aluop;
+    logic branch;
+    maindec md(op, memtoreg, memwrite, branch, alusrc, regdst, regwrite, jump, jrictrl, aluop);
+    aludec ad(funct, aluop, alucontrol);
+    assign pcsrc = branch & zero;
+endmodule
+
+module maindec (
+    input logic [5:0] op,
+    output logic memtoreg, memwrite, branch,
+    output logic alusrc, regdst, regwrite, jump, jrictrl,
+    output logic [1:0] aluop
+);
+    logic [9:0] controls;
+    assign {regwrite, regdst, alusrc, branch, memwrite, memtoreg, aluop, jump, jrictrl} = controls;
+    always_comb
+        case (op)
+            6'b000000: controls = 10'b1100001000; // R-type
+            6'b100011: controls = 10'b1010010000; // lw
+            6'b101011: controls = 10'b0010100000; // sw
+            6'b000100: controls = 10'b0001000100; // beq
+            6'b001000: controls = 10'b1010000000; // addi
+            6'b000010: controls = 10'b0000000010; // j
+            6'b111010: controls = 10'b0010000001; // jri yeni
+            6'b001010: controls = 10'b1010001100; // slti
+            default:   controls = 10'bxxxxxxxxxx;
+        endcase
+endmodule
+
+// ALU decoder with slti
+module aludec (
+    input logic [5:0] funct,
+    input logic [1:0] aluop,
+    output logic [2:0] alucontrol
+);
+    always_comb
+        case (aluop)
+            2'b00: alucontrol = 3'b010; // add
+            2'b01: alucontrol = 3'b110; // sub
+            2'b11: alucontrol = 3'b111; // slti yeni
+            default: case(funct) // R-type
+                6'b100000: alucontrol = 3'b010; // add
+                6'b100010: alucontrol = 3'b110; // sub
+                6'b100100: alucontrol = 3'b000; // and
+                6'b100101: alucontrol = 3'b001; // or
+                6'b101010: alucontrol = 3'b111; // slt
+                default:   alucontrol = 3'bxxx;
+            endcase
+        endcase
+endmodule
+
+// Datapath with jri mux
+module datapath (
+    input logic clk, reset,
+    input logic memtoreg, pcsrc, alusrc, regdst,
+    input logic regwrite, jump, jrictrl,
+    input logic [2:0] alucontrol,
+    output logic zero,
+    output logic [31:0] pc,
+    input logic [31:0] instr,
+    output logic [31:0] aluout, writedata,
+    input logic [31:0] readdata
+);
+    logic [4:0] writereg;
+    logic [31:0] pcnext, pcnextbr, pcplus4, pcbranch;
+    logic [31:0] signimm, signimmsh, srca, srcb, result;
+    
+    // next PC logic
+    flopr #(32) pcreg(clk, reset, pcnext, pc);
+    adder pcadd1(pc, 32'b100, pcplus4);
+    sl2 immsh(signimm, signimmsh);
+    adder pcadd2(pcplus4, signimmsh, pcbranch);
+    
+    logic [31:0] pcnext_br, pcnext_jri;
+
+    // 1. Branch Mux (PC+4 veya Branch Adresi)
+    mux2 #(32) pcbrmux(pcplus4, pcbranch, pcsrc, pcnext_br);
+    
+    // 2. JRI Mux (Üstteki sonuç veya ALUOut)
+    mux2 #(32) pcjrimux(pcnext_br, writedata, jrictrl, pcnext_jri); 
+    
+    // 3. Jump Mux (En son karar: Üstteki sonuç veya Jump Adresi)
+    mux2 #(32) pcmux(pcnext_jri, {pcplus4[31:28], instr[25:0], 2'b00}, jump, pcnext);
+
+    // register file logic
+    regfile rf(clk, regwrite, instr[25:21], instr[20:16], writereg, result, srca, writedata);
+    mux2 #(5) wrmux(instr[20:16], instr[15:11], regdst, writereg);
+    mux2 #(32) resmux(aluout, readdata, memtoreg, result);
+    signext se(instr[15:0], signimm);
+
+    // ALU logic
+    mux2 #(32) srcbmux(writedata, signimm, alusrc, srcb);
+    alu alu0(srca, srcb, alucontrol, aluout, zero);
+endmodule
+
+module alu(input  logic [31:0] a, b,  
+           input  logic [2:0]  alucont,  
+           output logic [31:0] result, 
+           output logic zero); 
+
+    always_comb 
+        case(alucont) 
+            3'b010: result = a + b; 
+            3'b110: result = a - b; 
+            3'b000: result = a & b; 
+            3'b001: result = a | b; 
+            3'b111: result = (a < b) ? 1 : 0; 
+            default: result = {32{1'bx}}; 
+        endcase 
+     
+    assign zero = (result == 0) ? 1'b1 : 1'b0; 
+endmodule
+
+module regfile (input    logic clk, we3,  
+                input    logic[4:0]  ra1, ra2, wa3,  
+                input    logic[31:0] wd3,  
+                output   logic[31:0] rd1, rd2); 
+ 
+  logic [31:0] rf [31:0]; 
+  
+ 
+  always_ff@(posedge clk) 
+     if (we3)  
+         rf [wa3] <= wd3;  
+ 
+  assign rd1 = (ra1 != 0) ? rf [ra1] : 0; 
+  assign rd2 = (ra2 != 0) ? rf[ ra2] : 0; 
+ 
+endmodule
+
+module adder (input  logic[31:0] a, b, 
+              output logic[31:0] y); 
+      
+     assign y = a + b; 
+endmodule 
+
+module sl2 (input  logic[31:0] a, 
+            output logic[31:0] y); 
+      
+     assign y = {a[29:0], 2'b00}; // shifts left by 2 
+endmodule
+
+module signext (input  logic[15:0] a, 
+                output logic[31:0] y); 
+               
+  assign y = {{16{a[15]}}, a};    // sign-extends 16-bit a 
+endmodule
+
+module flopr #(parameter WIDTH = 8) 
+              (input logic clk, reset,  
+        input logic[WIDTH-1:0] d,  
+               output logic[WIDTH-1:0] q); 
+ 
+  always_ff@(posedge clk, posedge reset) 
+    if (reset) q <= 0;  
+else       
+q <= d; 
+endmodule
+
+module mux2 #(parameter WIDTH = 8) 
+(input  logic[WIDTH-1:0] d0, d1,   
+input  logic s,  
+output logic[WIDTH-1:0] y); 
+assign y = s ? d1 : d0;  
+endmodule
+
+module dmem (input  logic   clk, we,      
+input  logic[31:0]  a, wd, 
+output logic[31:0]  rd); 
+logic  [31:0] RAM[63:0]; 
+
+assign rd = RAM[a[31:2]];    // word-aligned  read (for lw)
+always_ff @(posedge clk) 
+     if (we) 
+       RAM[a[31:2]] <= wd;      // word-aligned write (for sw) 
+ 
+endmodule
+
+module imem ( input logic [7:0] addr, output logic [31:0] instr); 
+ 
+ always_comb 
+    case (addr)
+    /*      
+  8'h00: instr = 32'h20080005; // addi $t0, $zero, 5
+  8'h04: instr = 32'h2009000C; // addi $t1, $zero, 12
+  8'h08: instr = 32'h3A090000; // jri $t1
+  8'h0C: instr = 32'h294A000A; // slti $t2, $t0, 10
+  8'h10: instr = 32'h01095020; // add $t2, $t0, $t1
+  8'h14: instr = 32'hAC0A0000; // sw $t2, 0($zero)
+  8'h18: instr = 32'h8C0B0000; // lw $t3, 0($zero)
+  8'h1C: instr = 32'h00000000; // nop
+  8'h20: instr = 32'h08000008; // j 0x20 (loop to halt)
+  */
+ 
+  8'h00: instr = 32'h20080005; // addi $t0, $zero, 5
+  8'h04: instr = 32'h20090018; // addi $t1, $zero, 24  <-- jump target (0x18)
+
+  8'h08: instr = 32'h294A000A; // slti $t2, $t0, 10   
+
+  8'h0C: instr = 32'hE8090000; // jri $t1      
+
+  8'h10: instr = 32'h200B0063; // addi $t3, $zero, 99 
+
+  8'h14: instr = 32'h200B0001; // addi $t3, $zero, 1   ATLAR
+
+  8'h18: instr = 32'hAC0B0000; // sw $t3, 0($zero)
+
+  8'h1C: instr = 32'h8C0C0000; // lw $t4, 0($zero)
+
+  8'h20: instr = 32'h08000008; // j 0x20 (loop)
+
+      default:  instr = {32{1'bx}}; // unknown address 
+    endcase 
+endmodule
